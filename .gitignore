@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Platform generator output
+generated/
+.env
+
+# venv
+.venv/
