@@ -223,3 +223,6 @@ generated/
 
 # venv
 .venv/
+# Sample pipeline runtime caches/data
+.ivy_cache/
+.sample_data/

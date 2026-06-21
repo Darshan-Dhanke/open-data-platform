@@ -1,0 +1,39 @@
+# Combo-1 sample overlay: adds the always-on CDC consumer on top of the
+# generated platform. Run as:
+#   docker compose -f generated/docker-compose.yml \
+#                  -f samples/pipelines/ecommerce_iceberg/compose.override.yml up -d
+# (run.py wires this up for you). Relative paths resolve from the project dir
+# (generated/), so ./jobs and ./configs/spark match the Spark service mounts.
+services:
+  spark-cdc-consumer:
+    image: darshandhanke07/odp-spark:3.5.1
+    container_name: spark-cdc-consumer
+    user: root
+    depends_on:
+      kafka:
+        condition: service_healthy
+      hive-metastore:
+        condition: service_healthy
+      spark-master:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-admin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-password123}
+    command:
+      - /opt/spark/bin/spark-submit
+      - --master
+      - spark://spark-master:7077
+      - --packages
+      - org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.0,org.apache.hadoop:hadoop-aws:3.3.4,org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1
+      - --conf
+      - spark.jars.ivy=/tmp/ivy
+      - /opt/jobs/cdc_consumer.py
+    volumes:
+      - ./configs/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+      - ./configs/spark/hive-site.xml:/opt/spark/conf/hive-site.xml:ro
+      - ./jobs:/opt/jobs:ro
+      # Persist the ivy package cache on the host so the ~280 MB of Spark/Kafka/
+      # Iceberg jars are downloaded only once, surviving `down -v`.
+      - ../.ivy_cache:/tmp/ivy
+    networks:
+      - platform

@@ -138,19 +138,19 @@ def service_blocks(selections: dict) -> dict:
 def _write_connect_entrypoint() -> None:
     d = Path("configs/kafka-connect")
     d.mkdir(parents=True, exist_ok=True)
-    # The connector JSON is sent via a heredoc with an UNQUOTED delimiter so
-    # the shell expands ${POSTGRES_USER} etc. from the container environment
-    # (a single-quoted curl -d payload would forward the literal placeholder
-    # text to Debezium and break the connection).
-    #
-    # Registration is best-effort: a failure must NOT terminate the
-    # container. Connect runs in the foreground via `wait`, so the REST API
-    # stays available even if the connector cannot be created.
+    # Start Kafka Connect and leave it running. We deliberately do NOT auto-
+    # register a connector against the platform Postgres: the only database
+    # present by default is `metastore`, and capturing public.* there puts the
+    # Hive Metastore's own tables into a logical-replication publication, which
+    # then blocks HMS from doing DELETEs (DROP TABLE/SCHEMA fails with a
+    # "set REPLICA IDENTITY" error). Register CDC connectors per use case
+    # against your own database instead — see samples/pipelines/* for an
+    # example that streams an `ecommerce` source DB.
     lines = [
         "#!/bin/bash",
         "set -e",
         "",
-        "# Start Kafka Connect in background using the original entrypoint",
+        "# Start Kafka Connect in the background using the original entrypoint.",
         "/docker-entrypoint.sh start &",
         "CONNECT_PID=$!",
         "",
@@ -158,41 +158,8 @@ def _write_connect_entrypoint() -> None:
         "until curl -sf http://localhost:8083/connectors > /dev/null 2>&1; do",
         "    sleep 5",
         "done",
-        'echo "Kafka Connect is ready."',
-        "",
-        "# Register Debezium PostgreSQL connector (idempotent, best-effort).",
-        'EXISTING=$(curl -sf http://localhost:8083/connectors/postgres-cdc-connector 2>/dev/null || echo "")',
-        'if [ -z "$EXISTING" ]; then',
-        '    echo "Registering Debezium connector..."',
-        '    curl -s -o /dev/null -w "Connector registration HTTP %{http_code}\\n" \\',
-        "        -X POST http://localhost:8083/connectors \\",
-        "        -H 'Content-Type: application/json' \\",
-        '        -d @- <<JSON || echo "Connector registration failed (continuing)."',
-        "{",
-        '  "name": "postgres-cdc-connector",',
-        '  "config": {',
-        '    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",',
-        '    "database.hostname": "postgresql",',
-        '    "database.port": "5432",',
-        '    "database.user": "${POSTGRES_USER:-hive}",',
-        '    "database.password": "${POSTGRES_PASSWORD:-hive}",',
-        '    "database.dbname": "${POSTGRES_DB:-metastore}",',
-        '    "database.server.name": "platform",',
-        '    "topic.prefix": "cdc",',
-        '    "schema.include.list": "public",',
-        '    "plugin.name": "pgoutput",',
-        '    "slot.name": "debezium_slot",',
-        '    "publication.name": "debezium_publication",',
-        '    "table.include.list": "public.*",',
-        '    "decimal.handling.mode": "string",',
-        '    "snapshot.mode": "initial"',
-        "  }",
-        "}",
-        "JSON",
-        '    echo "Debezium connector registration attempted."',
-        "else",
-        '    echo "Debezium connector already exists, skipping."',
-        "fi",
+        'echo "Kafka Connect is ready. Register CDC connectors via the REST API"',
+        'echo "(http://localhost:8083/connectors) against your own database."',
         "",
         "# Hand control back to Connect (keeps the container in the foreground)",
         "wait $CONNECT_PID",
