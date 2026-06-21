@@ -179,13 +179,29 @@ def check_prerequisites() -> None:
     if not _run_check("docker info"):
         console.print("  [red]FAIL[/red]  Docker daemon is not reachable.")
         console.print()
+        # OS-aware guidance — the checks and deployment are identical across
+        # platforms (all via `docker compose`); only how you start the daemon
+        # differs.
+        if sys.platform == "win32":
+            how = (
+                "  1. Open Docker Desktop from the Start menu or system tray.\n"
+                "  2. Wait until the whale icon stops animating (30-60s on first start)."
+            )
+        elif sys.platform == "darwin":
+            how = (
+                "  1. Open Docker Desktop from Applications (or the menu-bar whale).\n"
+                "  2. Wait until it reports 'Docker Desktop is running'."
+            )
+        else:  # linux and others
+            how = (
+                "  1. Start the daemon:  sudo systemctl start docker\n"
+                "     (or launch Docker Desktop if that's what you use).\n"
+                "  2. Ensure your user can reach it:  docker info"
+            )
         console.print(Panel(
-            "[bold]Docker Desktop is not running.[/bold]\n\n"
-            "  1. Open Docker Desktop from your Start menu or system tray.\n"
-            "  2. Wait until the whale icon in the taskbar stops animating\n"
-            "     (this can take 30-60 seconds on first start).\n"
-            "  3. Re-run this script:\n\n"
-            "     [bold]python setup.py[/bold]",
+            "[bold]Docker is not running.[/bold]\n\n"
+            f"{how}\n"
+            "  3. Re-run this script:  [bold]python setup.py[/bold]",
             border_style="yellow",
             title="Action required",
             expand=False,

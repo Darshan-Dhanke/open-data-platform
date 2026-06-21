@@ -29,7 +29,7 @@ generated/
 ## Quick start
 
 ```bash
-pip install pyyaml rich
+pip install -r requirements.txt   # pyyaml + rich
 python setup.py
 ```
 
@@ -55,6 +55,39 @@ docker compose -f generated/docker-compose.yml down -v      # stop + wipe volume
 
 Services start in dependency order; HMS, Airflow and Trino take 60–90s to go
 healthy on first boot. Re-running `python setup.py` overwrites `generated/`.
+
+## Tested sample scenarios
+
+Five reference stacks live in [`samples/`](samples/), covering all three table
+formats and a range of the alternative components. Run any of them with one
+command:
+
+```bash
+python samples/run_sample.py --list
+python samples/run_sample.py hudi-lakehouse          # generate + start
+python samples/run_sample.py hudi-lakehouse --down   # stop + clean up
+```
+
+| Scenario | Format | Highlights |
+|---|---|---|
+| `iceberg-lakehouse` | Iceberg | Kafka/Debezium CDC · Spark · Trino · Airflow · Marquez · Prometheus/Grafana |
+| `delta-lakehouse` | Delta | Spark · Trino · Airflow · Soda quality |
+| `hudi-lakehouse` | Hudi | Spark · Trino · Hive Metastore (minimal) |
+| `alternatives-showcase` | Iceberg | NiFi · Flink · Dagster · Metabase · Netdata |
+| `lean-delta-alt` | Delta | Prefect · Metabase (lightweight) |
+
+I ran these five use cases while building the platform: all five pass
+`python samples/validate_all.py` (generate → valid Compose for every
+combination), and the three table-format core stacks were booted and
+smoke-tested live. See [samples/README.md](samples/README.md) for details and
+how to contribute your own scenario.
+
+## Cross-platform
+
+Deployment is identical on **Windows, Linux and macOS** — everything runs
+through `docker compose`, and `setup.py` is plain Python 3.10+. A
+`.gitattributes` keeps container-mounted scripts/configs as LF so they work
+regardless of where the repo is cloned.
 
 ## Presets
 

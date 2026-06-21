@@ -1,0 +1,4 @@
+# Dependencies for the setup CLI (setup.py / composer.py).
+# Install with:  pip install -r requirements.txt
+pyyaml>=6.0
+rich>=13.0
