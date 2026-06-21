@@ -84,6 +84,11 @@ def _card(token, db_id, name, sql, display, viz=None):
     })["id"]
 
 
+def _dc(card_id, x, y, w, h):
+    return {"id": -(card_id), "card_id": card_id, "row": y, "col": x,
+            "size_x": w, "size_y": h}
+
+
 def main() -> int:
     _wait_healthy()
     token = _session()
@@ -91,24 +96,42 @@ def main() -> int:
     _req("POST", f"/api/database/{db_id}/sync_schema", token)
     time.sleep(8)  # let the sync register tables
 
-    cards = [
-        _card(token, db_id, "Revenue by channel",
-              "SELECT channel, round(sum(revenue),0) AS revenue "
-              "FROM iceberg.gold.daily_revenue GROUP BY 1 ORDER BY 2 DESC", "bar"),
-        _card(token, db_id, "Top 10 products by revenue",
-              "SELECT name, revenue FROM iceberg.gold.top_products "
-              "ORDER BY revenue DESC LIMIT 10", "row"),
-        _card(token, db_id, "Customers & avg LTV by segment",
-              "SELECT segment, count(*) AS customers, round(avg(lifetime_value),0) AS avg_ltv "
-              "FROM iceberg.gold.customer_ltv GROUP BY 1", "bar"),
-    ]
+    # KPI scalar cards
+    total_rev = _card(token, db_id, "Total revenue",
+                      "SELECT round(sum(revenue),0) FROM iceberg.gold.daily_revenue", "scalar")
+    total_orders = _card(token, db_id, "Total orders",
+                         "SELECT sum(orders) FROM iceberg.gold.daily_revenue", "scalar")
+    total_cust = _card(token, db_id, "Customers",
+                       "SELECT count(*) FROM iceberg.gold.customer_ltv", "scalar")
+    aov = _card(token, db_id, "Avg order value",
+                "SELECT round(sum(revenue)/sum(orders),2) FROM iceberg.gold.daily_revenue", "scalar")
+    # Revenue trend (time series)
+    trend = _card(token, db_id, "Daily revenue trend",
+                  "SELECT order_date, round(sum(revenue),0) AS revenue "
+                  "FROM iceberg.gold.daily_revenue GROUP BY 1 ORDER BY 1", "line",
+                  {"graph.dimensions": ["order_date"], "graph.metrics": ["revenue"]})
+    # Breakdown charts
+    by_channel = _card(token, db_id, "Revenue by channel",
+                       "SELECT channel, round(sum(revenue),0) AS revenue "
+                       "FROM iceberg.gold.daily_revenue GROUP BY 1 ORDER BY 2 DESC", "bar",
+                       {"graph.dimensions": ["channel"], "graph.metrics": ["revenue"]})
+    top_prod = _card(token, db_id, "Top 10 products by revenue",
+                     "SELECT name, revenue FROM iceberg.gold.top_products "
+                     "ORDER BY revenue DESC LIMIT 10", "row",
+                     {"graph.dimensions": ["name"], "graph.metrics": ["revenue"]})
+    ltv = _card(token, db_id, "Avg LTV by segment",
+                "SELECT segment, round(avg(lifetime_value),0) AS avg_ltv "
+                "FROM iceberg.gold.customer_ltv GROUP BY 1", "bar",
+                {"graph.dimensions": ["segment"], "graph.metrics": ["avg_ltv"]})
 
-    dash = _req("POST", "/api/dashboard", token,
-                data={"name": "E-commerce Overview"})
+    dash = _req("POST", "/api/dashboard", token, data={"name": "E-commerce Overview"})
     dash_id = dash["id"]
-    dashcards = [{"id": -(i + 1), "card_id": cid, "row": (i // 2) * 7,
-                  "col": (i % 2) * 9, "size_x": 9, "size_y": 7}
-                 for i, cid in enumerate(cards)]
+    dashcards = [
+        _dc(total_rev, 0, 0, 6, 4), _dc(total_orders, 6, 0, 6, 4),
+        _dc(total_cust, 12, 0, 6, 4), _dc(aov, 18, 0, 6, 4),
+        _dc(trend, 0, 4, 24, 7),
+        _dc(by_channel, 0, 11, 8, 7), _dc(top_prod, 8, 11, 8, 7), _dc(ltv, 16, 11, 8, 7),
+    ]
     _req("PUT", f"/api/dashboard/{dash_id}/cards", token, data={"cards": dashcards})
 
     print("Metabase provisioned.")

@@ -35,13 +35,18 @@ Postgres (source)  ──Debezium CDC──▶  Kafka  ──Spark Structured St
 2. **CDC**: Debezium streams every change to Kafka; an always-on Spark job lands
    them in **bronze** Iceberg (`iceberg.bronze.cdc_events`), append-only.
 3. **Transform** (Airflow → Trino SQL): bronze → **silver** (typed,
-   latest-state-per-key) → **gold** marts:
-   `daily_revenue`, `top_products` (with margin), `customer_ltv`.
-4. **Lineage**: the Airflow run's job graph appears in Marquez automatically.
-5. **Visualize**: an "E-commerce Overview" Metabase dashboard (revenue by
-   channel, top products, LTV by segment) is auto-provisioned over the gold
-   tables via Trino.
-6. **CDC velocity**: push new orders into the source and watch them flow through
+   latest-state-per-key) → **gold** marts (`daily_revenue`, `top_products` with
+   margin, `customer_ltv`), then a **data-quality gate** (row counts, no nulls,
+   non-negative revenue, LTV covers all customers) that fails the run on a
+   violation.
+4. **Lineage**: the DAG emits OpenLineage events so Marquez shows the full
+   **table-level graph** `bronze.cdc_events → silver.* → gold.*`.
+5. **Visualize**: an auto-provisioned **"E-commerce Overview"** Metabase
+   dashboard — KPI tiles (total revenue, orders, customers, AOV), a daily
+   revenue trend, and revenue-by-channel / top-products / LTV-by-segment.
+6. **Monitor**: a provisioned Grafana **"Platform Overview"** dashboard (Trino
+   query activity + per-container CPU/memory).
+7. **CDC velocity**: push new orders into the source and watch them flow through
    to bronze (and to gold on the next pipeline run).
 
 ## Run it
@@ -59,9 +64,9 @@ python samples/pipelines/ecommerce_iceberg/run.py --down   # tear down + clean u
 ### Then explore
 - **Metabase** http://localhost:3002 — *E-commerce Overview* dashboard (login printed by the run)
 - **Trino** http://localhost:8080 — query `iceberg.gold.*`
-- **Airflow** http://localhost:8082 — the `ecommerce_iceberg_pipeline` DAG (admin password in `generated/.env`)
-- **Marquez** http://localhost:3001 — lineage for the run
-- **Grafana** http://localhost:3000 — platform metrics
+- **Airflow** http://localhost:8082 — `ecommerce_iceberg_pipeline` DAG, incl. the `data_quality` gate (admin pw in `generated/.env`)
+- **Marquez** http://localhost:3001 — search dataset `gold.daily_revenue` to see the `bronze → silver → gold` lineage graph
+- **Grafana** http://localhost:3000 — the *Platform Overview* dashboard
 
 ### Show CDC velocity
 ```bash

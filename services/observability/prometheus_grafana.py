@@ -160,6 +160,7 @@ def _write_grafana_provisioning() -> None:
         "apiVersion: 1\n"
         "datasources:\n"
         "  - name: Prometheus\n"
+        "    uid: prometheus\n"
         "    type: prometheus\n"
         "    access: proxy\n"
         "    url: http://prometheus:9090\n"
@@ -188,51 +189,61 @@ def _write_grafana_provisioning() -> None:
     )
 
 
-def _overview_dashboard() -> dict:
-    """A minimal but valid Grafana dashboard: per-container CPU and memory
-    from cAdvisor. Kept compact and dependency-free so it provisions cleanly."""
-    def timeseries(panel_id, title, expr, unit, x, y):
-        return {
-            "id": panel_id,
-            "title": title,
-            "type": "timeseries",
-            "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-            "gridPos": {"h": 9, "w": 12, "x": x, "y": y},
-            "fieldConfig": {"defaults": {"unit": unit}, "overrides": []},
-            "targets": [{
-                "expr": expr,
-                "legendFormat": "{{name}}",
-                "refId": "A",
-            }],
-        }
+DS = {"type": "prometheus", "uid": "prometheus"}
 
+
+def _ts(pid, title, expr, unit, x, y, legend="{{name}}", w=12, h=8):
+    return {
+        "id": pid, "title": title, "type": "timeseries", "datasource": DS,
+        "gridPos": {"h": h, "w": w, "x": x, "y": y},
+        "fieldConfig": {"defaults": {"unit": unit, "custom": {"fillOpacity": 10}}, "overrides": []},
+        "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+        "targets": [{"expr": expr, "legendFormat": legend, "refId": "A"}],
+    }
+
+
+def _stat(pid, title, expr, unit, x, y, w=6, h=4):
+    return {
+        "id": pid, "title": title, "type": "stat", "datasource": DS,
+        "gridPos": {"h": h, "w": w, "x": x, "y": y},
+        "fieldConfig": {"defaults": {"unit": unit, "color": {"mode": "thresholds"},
+                        "thresholds": {"steps": [{"color": "green", "value": None}]}}, "overrides": []},
+        "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value"},
+        "targets": [{"expr": expr, "refId": "A"}],
+    }
+
+
+def _overview_dashboard() -> dict:
+    """Curated platform dashboard: Trino query activity (top row of stats),
+    Trino running queries over time, and per-container CPU/memory from cAdvisor.
+    References the Prometheus datasource by fixed uid so it provisions cleanly."""
     return {
         "annotations": {"list": []},
         "editable": True,
         "schemaVersion": 39,
         "title": "Platform Overview",
         "tags": ["platform"],
-        "time": {"from": "now-30m", "to": "now"},
-        "templating": {
-            "list": [{
-                "name": "DS_PROMETHEUS",
-                "type": "datasource",
-                "query": "prometheus",
-                "current": {"text": "Prometheus", "value": "Prometheus"},
-                "hide": 0,
-            }]
-        },
+        "refresh": "10s",
+        "time": {"from": "now-1h", "to": "now"},
+        "templating": {"list": []},
         "panels": [
-            timeseries(
-                1, "Container CPU (cores)",
+            _stat(1, "Trino completed queries",
+                  "trino_execution_name_QueryManager_CompletedQueries", "short", 0, 0),
+            _stat(2, "Trino running queries",
+                  "trino_execution_name_QueryManager_RunningQueries", "short", 6, 0),
+            _stat(3, "Trino input rows consumed",
+                  "trino_execution_name_QueryManager_ConsumedInputRows", "short", 12, 0),
+            _stat(4, "Containers monitored",
+                  'count(container_last_seen{name!=""})', "short", 18, 0),
+            _ts(5, "Trino running queries",
+                "trino_execution_name_QueryManager_RunningQueries", "short", 0, 4,
+                legend="running", w=24, h=6),
+            _ts(6, "Container CPU (cores)",
                 'sum by (name) (rate(container_cpu_usage_seconds_total{name!=""}[1m]))',
-                "short", 0, 0,
-            ),
-            timeseries(
-                2, "Container Memory (bytes)",
+                "short", 0, 10),
+            _ts(7, "Container memory",
                 'sum by (name) (container_memory_usage_bytes{name!=""})',
-                "bytes", 12, 0,
-            ),
+                "bytes", 12, 10),
         ],
     }
 
