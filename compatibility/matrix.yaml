@@ -426,16 +426,20 @@ layers:
         compatible:
           - name: airflow
             layer: orchestration
-            reason: "native GreatExpectationsOperator"
-          - name: dagster
-            layer: orchestration
-            reason: "native integration library"
+            reason: "shipped as an Airflow DAG that runs GE on the Airflow worker"
           - name: spark
             layer: processing
             reason: "GE has a Spark execution engine"
           - name: trino
             layer: query_engine
-            reason: "GE can validate via SQLAlchemy against Trino"
+            reason: "GE validates via SQLAlchemy against Trino"
+        incompatible:
+          - name: dagster
+            layer: orchestration
+            reason: "this platform ships GE as an Airflow DAG; needs orchestration=airflow"
+          - name: prefect
+            layer: orchestration
+            reason: "this platform ships GE as an Airflow DAG; needs orchestration=airflow"
 
       - name: soda
         display: "Soda Core"
@@ -443,13 +447,20 @@ layers:
         compatible:
           - name: airflow
             layer: orchestration
-            reason: "runs via BashOperator or PythonOperator"
+            reason: "shipped as an Airflow DAG that runs Soda on the Airflow worker"
           - name: trino
             layer: query_engine
-            reason: "Soda supports Trino via trino connector"
+            reason: "Soda supports Trino via its trino connector"
           - name: spark
             layer: processing
             reason: "Soda supports Spark via soda-spark package"
+        incompatible:
+          - name: dagster
+            layer: orchestration
+            reason: "this platform ships Soda as an Airflow DAG; needs orchestration=airflow"
+          - name: prefect
+            layer: orchestration
+            reason: "this platform ships Soda as an Airflow DAG; needs orchestration=airflow"
 
   - name: catalog
     display: "Data Catalog"
@@ -485,6 +496,20 @@ layers:
           - name: spark
             layer: processing
             reason: "OpenMetadata supports OpenLineage events from Spark"
+
+      - name: marquez
+        display: "Marquez"
+        description: "Lightweight OpenLineage backend for data lineage, reuses Postgres, no search engine"
+        compatible:
+          - name: airflow
+            layer: orchestration
+            reason: "Airflow's OpenLineage provider emits lineage to Marquez automatically"
+          - name: trino
+            layer: query_engine
+            reason: "query lineage can be captured via OpenLineage"
+          - name: spark
+            layer: processing
+            reason: "OpenLineage Spark listener can emit run events to Marquez"
 
   - name: governance
     display: "Governance and Security"
@@ -581,3 +606,17 @@ layers:
           - name: minio
             layer: storage
             reason: "MinIO exposes native Prometheus metrics endpoint"
+
+      - name: netdata
+        display: "Netdata"
+        description: "Single-container, zero-config system and per-container metrics with its own dashboard"
+        compatible:
+          - name: trino
+            layer: query_engine
+            reason: "observability is layer-agnostic; Netdata auto-discovers all containers"
+          - name: spark
+            layer: processing
+            reason: "Netdata collects per-container CPU/memory/network with no per-service config"
+          - name: minio
+            layer: storage
+            reason: "observability is layer-agnostic"

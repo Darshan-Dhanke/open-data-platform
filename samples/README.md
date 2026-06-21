@@ -52,13 +52,16 @@ python samples/validate_all.py     # exit 0 if all combinations generate valid C
   `hudi-lakehouse`) and `lean-delta-alt` were **booted and smoke-tested live**
   (services healthy; Trino shows the expected catalog).
 
-## Adding your own scenario (contributions welcome)
+## Add your own scenario
+
+**Fork the repo** and adapt it to your needs:
 
 1. Add an entry to `SCENARIOS` in [`scenarios.py`](scenarios.py) — one component
    per layer (see the keys in `composer.MODULE_MAP`).
 2. Validate it: `python samples/validate_all.py`.
 3. Boot it: `python samples/run_sample.py <your-name>`.
 
-Note a couple of cross-layer rules when composing: `quality` (`soda`,
-`great_expectations`) runs as Airflow DAGs, so it needs `orchestration=airflow`;
-`spark_sql` reuses the Spark service rather than adding a container.
+Cross-layer rules to keep in mind (the compatibility matrix enforces these in
+the interactive picker): `quality` (`soda`, `great_expectations`) runs as
+Airflow DAGs, so it needs `orchestration=airflow`; `nessie` only works with
+`iceberg`; `spark_sql` reuses the Spark service rather than adding a container.
