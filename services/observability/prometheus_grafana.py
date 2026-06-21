@@ -1,0 +1,254 @@
+"""
+Prometheus + Grafana observability block.
+
+Adds three services:
+  - prometheus : scrapes itself, cAdvisor (container metrics) and Trino's
+                 native /metrics endpoint.
+  - cadvisor   : exposes per-container CPU / memory / network metrics for
+                 every service on the host, with no per-service config.
+  - grafana    : provisioned out of the box with a Prometheus datasource and
+                 a "Platform Overview" dashboard.
+
+Config and provisioning files are written under configs/ at generation time
+and mounted read-only into the containers.
+
+Exposes:
+  - Prometheus : http://localhost:${PROMETHEUS_PORT}  (default 9090)
+  - Grafana    : http://localhost:${GRAFANA_PORT}      (default 3000)
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+
+# Upstream official images. These are not yet mirrored into the odp-* Docker
+# Hub namespace; they pull directly from their public registries.
+PROMETHEUS_IMAGE = "prom/prometheus:v2.54.1"
+GRAFANA_IMAGE = "grafana/grafana:11.2.0"
+CADVISOR_IMAGE = "gcr.io/cadvisor/cadvisor:v0.49.1"
+
+
+def service_blocks(selections: dict) -> dict:
+    query_engine = selections.get("query_engine")
+
+    _write_prometheus_config(query_engine)
+    _write_grafana_provisioning()
+
+    blocks: dict = {}
+
+    blocks["prometheus"] = {
+        "image": PROMETHEUS_IMAGE,
+        "container_name": "prometheus",
+        "command": [
+            "--config.file=/etc/prometheus/prometheus.yml",
+            "--storage.tsdb.path=/prometheus",
+            "--web.enable-lifecycle",
+        ],
+        "ports": ["${PROMETHEUS_PORT:-9090}:9090"],
+        "volumes": [
+            "./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro",
+            "prometheus_data:/prometheus",
+        ],
+        "depends_on": {"cadvisor": {"condition": "service_started"}},
+        "healthcheck": {
+            "test": ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9090/-/healthy || exit 1"],
+            "interval": "30s",
+            "timeout": "10s",
+            "retries": 5,
+            "start_period": "20s",
+        },
+        "networks": ["platform"],
+    }
+
+    blocks["cadvisor"] = {
+        "image": CADVISOR_IMAGE,
+        "container_name": "cadvisor",
+        "command": ["--housekeeping_interval=15s", "--docker_only=true"],
+        # cAdvisor needs read access to the host's container/cgroup metadata.
+        # privileged is required for it to read all containers' cgroups.
+        "privileged": True,
+        "volumes": [
+            "/:/rootfs:ro",
+            "/var/run:/var/run:ro",
+            "/sys:/sys:ro",
+            "/var/lib/docker/:/var/lib/docker:ro",
+            "/dev/disk/:/dev/disk:ro",
+        ],
+        "networks": ["platform"],
+    }
+
+    blocks["grafana"] = {
+        "image": GRAFANA_IMAGE,
+        "container_name": "grafana",
+        "ports": ["${GRAFANA_PORT:-3000}:3000"],
+        "environment": {
+            "GF_SECURITY_ADMIN_USER":     "${GRAFANA_ADMIN_USER:-admin}",
+            "GF_SECURITY_ADMIN_PASSWORD": "${GRAFANA_ADMIN_PASSWORD:-admin}",
+            # No sign-up, and skip the "install plugins" phone-home on boot.
+            "GF_USERS_ALLOW_SIGN_UP": "false",
+            "GF_ANALYTICS_REPORTING_ENABLED": "false",
+        },
+        "volumes": [
+            "./configs/grafana/provisioning:/etc/grafana/provisioning:ro",
+            "./configs/grafana/dashboards:/var/lib/grafana/dashboards:ro",
+            "grafana_data:/var/lib/grafana",
+        ],
+        "depends_on": {"prometheus": {"condition": "service_healthy"}},
+        "healthcheck": {
+            "test": ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/api/health || exit 1"],
+            "interval": "30s",
+            "timeout": "10s",
+            "retries": 5,
+            "start_period": "20s",
+        },
+        "networks": ["platform"],
+    }
+
+    return blocks
+
+
+def _write_prometheus_config(query_engine: str | None) -> None:
+    d = Path("configs/prometheus")
+    d.mkdir(parents=True, exist_ok=True)
+
+    jobs = [
+        "  - job_name: prometheus",
+        "    static_configs:",
+        "      - targets: ['localhost:9090']",
+        "  - job_name: cadvisor",
+        "    static_configs:",
+        "      - targets: ['cadvisor:8080']",
+    ]
+    # Trino exposes a native Prometheus/OpenMetrics endpoint at /metrics, but
+    # it still requires a user even when authentication is disabled (otherwise
+    # it returns 401). With no authenticator configured, Trino accepts any
+    # username via basic auth and ignores the password, so a dummy user is
+    # enough to authorize the scrape.
+    if query_engine == "trino":
+        jobs += [
+            "  - job_name: trino",
+            "    metrics_path: /metrics",
+            "    basic_auth:",
+            "      username: prometheus",
+            "    static_configs:",
+            "      - targets: ['trino:8080']",
+        ]
+
+    content = (
+        "# Auto-generated by open-data-platform setup.py\n"
+        "global:\n"
+        "  scrape_interval: 15s\n"
+        "  evaluation_interval: 15s\n"
+        "\n"
+        "scrape_configs:\n"
+        + "\n".join(jobs)
+        + "\n"
+    )
+    (d / "prometheus.yml").write_text(content, encoding="utf-8", newline="\n")
+
+
+def _write_grafana_provisioning() -> None:
+    prov = Path("configs/grafana/provisioning")
+    (prov / "datasources").mkdir(parents=True, exist_ok=True)
+    (prov / "dashboards").mkdir(parents=True, exist_ok=True)
+    dash_dir = Path("configs/grafana/dashboards")
+    dash_dir.mkdir(parents=True, exist_ok=True)
+
+    (prov / "datasources" / "datasource.yml").write_text(
+        "apiVersion: 1\n"
+        "datasources:\n"
+        "  - name: Prometheus\n"
+        "    type: prometheus\n"
+        "    access: proxy\n"
+        "    url: http://prometheus:9090\n"
+        "    isDefault: true\n"
+        "    editable: true\n",
+        encoding="utf-8", newline="\n",
+    )
+
+    (prov / "dashboards" / "dashboards.yml").write_text(
+        "apiVersion: 1\n"
+        "providers:\n"
+        "  - name: platform\n"
+        "    orgId: 1\n"
+        "    folder: ''\n"
+        "    type: file\n"
+        "    disableDeletion: false\n"
+        "    editable: true\n"
+        "    options:\n"
+        "      path: /var/lib/grafana/dashboards\n",
+        encoding="utf-8", newline="\n",
+    )
+
+    (dash_dir / "platform-overview.json").write_text(
+        json.dumps(_overview_dashboard(), indent=2),
+        encoding="utf-8", newline="\n",
+    )
+
+
+def _overview_dashboard() -> dict:
+    """A minimal but valid Grafana dashboard: per-container CPU and memory
+    from cAdvisor. Kept compact and dependency-free so it provisions cleanly."""
+    def timeseries(panel_id, title, expr, unit, x, y):
+        return {
+            "id": panel_id,
+            "title": title,
+            "type": "timeseries",
+            "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+            "gridPos": {"h": 9, "w": 12, "x": x, "y": y},
+            "fieldConfig": {"defaults": {"unit": unit}, "overrides": []},
+            "targets": [{
+                "expr": expr,
+                "legendFormat": "{{name}}",
+                "refId": "A",
+            }],
+        }
+
+    return {
+        "annotations": {"list": []},
+        "editable": True,
+        "schemaVersion": 39,
+        "title": "Platform Overview",
+        "tags": ["platform"],
+        "time": {"from": "now-30m", "to": "now"},
+        "templating": {
+            "list": [{
+                "name": "DS_PROMETHEUS",
+                "type": "datasource",
+                "query": "prometheus",
+                "current": {"text": "Prometheus", "value": "Prometheus"},
+                "hide": 0,
+            }]
+        },
+        "panels": [
+            timeseries(
+                1, "Container CPU (cores)",
+                'sum by (name) (rate(container_cpu_usage_seconds_total{name!=""}[1m]))',
+                "short", 0, 0,
+            ),
+            timeseries(
+                2, "Container Memory (bytes)",
+                'sum by (name) (container_memory_usage_bytes{name!=""})',
+                "bytes", 12, 0,
+            ),
+        ],
+    }
+
+
+def env_vars(selections: dict) -> dict:
+    return {
+        "PROMETHEUS_PORT":        "9090",
+        "GRAFANA_PORT":           "3000",
+        "GRAFANA_ADMIN_USER":     "admin",
+        "GRAFANA_ADMIN_PASSWORD": "admin",
+    }
+
+
+def named_volumes(selections: dict) -> list[str]:
+    return ["prometheus_data", "grafana_data"]
+
+
+def named_networks(selections: dict) -> list[str]:
+    return ["platform"]

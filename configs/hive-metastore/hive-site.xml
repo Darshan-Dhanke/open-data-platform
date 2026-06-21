@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<!--
+  hive-site.xml — Hive Metastore standalone configuration
+  This file is mounted into the hive-metastore container read-only.
+  Edit values here to tune HMS behaviour without rebuilding the image.
+  Most connection settings are passed via SERVICE_OPTS env var in the
+  compose file; this file handles the remainder.
+-->
+<configuration>
+
+  <!-- Metastore URI — other services point to this -->
+  <property>
+    <name>hive.metastore.uris</name>
+    <value>thrift://hive-metastore:9083</value>
+    <description>Thrift URI that Spark, Trino, and Flink connect to</description>
+  </property>
+
+  <!-- Schema verification — set to false on first boot, true after schema is initialised -->
+  <property>
+    <name>hive.metastore.schema.verification</name>
+    <value>false</value>
+  </property>
+
+  <!-- Auto-create schema on first boot -->
+  <property>
+    <name>datanucleus.schema.autoCreateAll</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <name>datanucleus.autoCreateSchema</name>
+    <value>true</value>
+  </property>
+
+  <!-- S3A / MinIO settings -->
+  <!-- fs.s3a.endpoint is essential: without it S3A targets real AWS S3 and
+       any s3a:// access fails. Point it at the in-network MinIO service. -->
+  <property>
+    <name>fs.s3a.endpoint</name>
+    <value>http://minio:9000</value>
+  </property>
+
+  <property>
+    <name>fs.s3a.connection.ssl.enabled</name>
+    <value>false</value>
+    <description>MinIO endpoint is plain HTTP</description>
+  </property>
+
+  <property>
+    <name>fs.s3a.path.style.access</name>
+    <value>true</value>
+    <description>Required for MinIO — AWS S3 uses virtual-hosted style, MinIO uses path style</description>
+  </property>
+
+  <property>
+    <name>fs.s3a.impl</name>
+    <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+  </property>
+
+  <!-- Read credentials from the AWS_* env vars set on the container, so no
+       secrets are baked into this file. SimpleAWSCredentialsProvider would
+       require fs.s3a.access.key/secret.key here and fail without them. -->
+  <property>
+    <name>fs.s3a.aws.credentials.provider</name>
+    <value>com.amazonaws.auth.EnvironmentVariableCredentialsProvider</value>
+  </property>
+
+  <!-- Connection pool — tune for larger deployments -->
+  <property>
+    <name>datanucleus.connectionPoolingType</name>
+    <value>HikariCP</value>
+  </property>
+
+  <property>
+    <name>datanucleus.connectionPool.maxPoolSize</name>
+    <value>10</value>
+  </property>
+
+  <!-- Stats collection — disable for cleaner local setup -->
+  <property>
+    <name>hive.stats.autogather</name>
+    <value>false</value>
+  </property>
+
+</configuration>

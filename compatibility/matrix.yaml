@@ -1,0 +1,583 @@
+layers:
+
+  - name: storage
+    display: "Storage Layer"
+    description: "Object store or distributed file system where raw and processed data lives"
+    stacks:
+      - name: minio
+        display: "MinIO"
+        description: "S3-compatible object store, runs anywhere, easiest local setup"
+        compatible:
+          - name: iceberg
+            layer: table_format
+            reason: "native S3-compatible support, works with all Iceberg catalogs"
+          - name: delta
+            layer: table_format
+            reason: "Delta supports S3-compatible endpoints natively"
+          - name: hudi
+            layer: table_format
+            reason: "Hudi supports S3-compatible storage via Hadoop S3A connector"
+          - name: hive_metastore
+            layer: metastore
+            reason: "standard pairing, HMS uses MinIO as warehouse path via S3A"
+          - name: nessie
+            layer: metastore
+            reason: "Nessie is catalog-layer only, storage-agnostic"
+
+      - name: hdfs
+        display: "HDFS"
+        description: "Distributed file system, native Hadoop ecosystem, heavier to run locally"
+        compatible:
+          - name: iceberg
+            layer: table_format
+            reason: "Iceberg has first-class HDFS support"
+          - name: delta
+            layer: table_format
+            reason: "Delta supports HDFS but connector config is more involved"
+          - name: hive_metastore
+            layer: metastore
+            reason: "native pairing, HMS was built for HDFS-backed warehouses"
+        incompatible:
+          - name: nessie
+            layer: metastore
+            reason: "Nessie is designed around S3-compatible and REST catalog patterns, HDFS path resolution is not supported"
+          - name: unity_catalog
+            layer: metastore
+            reason: "Unity Catalog requires S3-compatible object storage"
+          - name: hudi
+            layer: table_format
+            reason: "Hudi on HDFS in a Docker environment has unresolved namenode HA issues that make it unreliable for local development"
+
+  - name: table_format
+    display: "Table Format"
+    description: "Provides ACID transactions, time travel, and schema evolution over object storage"
+    stacks:
+      - name: iceberg
+        display: "Apache Iceberg"
+        description: "Most mature open table format, widest engine compatibility, REST catalog support"
+        compatible:
+          - name: hive_metastore
+            layer: metastore
+            reason: "HMS is the default Iceberg catalog for Spark and Trino"
+          - name: nessie
+            layer: metastore
+            reason: "Nessie is purpose-built for Iceberg, enables git-like branching on tables"
+          - name: trino
+            layer: query_engine
+            reason: "Trino has a native Iceberg connector, production-grade"
+          - name: spark
+            layer: processing
+            reason: "Spark is the primary write engine for Iceberg"
+          - name: flink
+            layer: processing
+            reason: "Flink has stable Iceberg sink support via iceberg-flink runtime"
+          - name: airflow
+            layer: orchestration
+            reason: "orchestration layer is engine-agnostic"
+          - name: dagster
+            layer: orchestration
+            reason: "orchestration layer is engine-agnostic"
+          - name: prefect
+            layer: orchestration
+            reason: "orchestration layer is engine-agnostic"
+
+      - name: delta
+        display: "Delta Lake"
+        description: "Originated from Databricks, strong Spark-first ecosystem, wide adoption"
+        compatible:
+          - name: hive_metastore
+            layer: metastore
+            reason: "Delta uses HMS for table registration in open source deployments"
+          - name: trino
+            layer: query_engine
+            reason: "Trino has a Delta connector, note: read-only in current OSS Trino"
+          - name: spark
+            layer: processing
+            reason: "Delta was built for Spark, tightest integration available"
+          - name: airflow
+            layer: orchestration
+            reason: "orchestration layer is engine-agnostic"
+          - name: dagster
+            layer: orchestration
+            reason: "orchestration layer is engine-agnostic"
+          - name: prefect
+            layer: orchestration
+            reason: "orchestration layer is engine-agnostic"
+        incompatible:
+          - name: nessie
+            layer: metastore
+            reason: "Nessie catalog does not support Delta Lake table format"
+          - name: flink
+            layer: processing
+            reason: "Flink and Delta Lake OSS integration is experimental and not production-ready"
+
+      - name: hudi
+        display: "Apache Hudi"
+        description: "Strong upsert and incremental processing support, CDC-first design"
+        compatible:
+          - name: hive_metastore
+            layer: metastore
+            reason: "Hudi registers tables in HMS via HoodieHiveSyncTool"
+          - name: spark
+            layer: processing
+            reason: "Hudi is Spark-native, best support through spark-hudi bundle"
+          - name: trino
+            layer: query_engine
+            reason: "Trino supports Hudi read via Hive connector with Hudi input format"
+          - name: airflow
+            layer: orchestration
+            reason: "orchestration layer is engine-agnostic"
+          - name: dagster
+            layer: orchestration
+            reason: "orchestration layer is engine-agnostic"
+        incompatible:
+          - name: nessie
+            layer: metastore
+            reason: "Nessie does not support Hudi table format"
+          - name: flink
+            layer: processing
+            reason: "Flink-Hudi integration exists but is unstable in OSS, version conflicts are common"
+
+  - name: metastore
+    display: "Metastore / Catalog"
+    description: "Tracks table schemas, partitions, and storage locations across engines"
+    stacks:
+      - name: hive_metastore
+        display: "Hive Metastore"
+        description: "Battle-tested, widest compatibility across all engines and table formats"
+        compatible:
+          - name: trino
+            layer: query_engine
+            reason: "Trino was built around HMS as its primary catalog"
+          - name: spark
+            layer: processing
+            reason: "SparkSession.enableHiveSupport() is the standard integration path"
+          - name: iceberg
+            layer: table_format
+            reason: "HMS stores Iceberg table pointers, well-supported"
+          - name: delta
+            layer: table_format
+            reason: "Delta registers table metadata in HMS for cross-engine access"
+          - name: hudi
+            layer: table_format
+            reason: "Hudi syncs table metadata to HMS via sync tool"
+          - name: minio
+            layer: storage
+            reason: "standard pairing via S3A connector"
+          - name: hdfs
+            layer: storage
+            reason: "native pairing, HMS was originally built for HDFS"
+
+      - name: nessie
+        display: "Project Nessie"
+        description: "Git-like catalog with branching and tagging, Iceberg-native REST catalog"
+        compatible:
+          - name: iceberg
+            layer: table_format
+            reason: "Nessie is designed specifically for Iceberg as a REST catalog"
+          - name: trino
+            layer: query_engine
+            reason: "Trino supports Nessie via Iceberg REST catalog config"
+          - name: spark
+            layer: processing
+            reason: "Spark connects to Nessie via iceberg-nessie catalog extension"
+          - name: minio
+            layer: storage
+            reason: "Nessie is storage-agnostic, works with any S3-compatible backend"
+        incompatible:
+          - name: delta
+            layer: table_format
+            reason: "Nessie does not support Delta Lake format"
+          - name: hudi
+            layer: table_format
+            reason: "Nessie does not support Hudi format"
+          - name: hdfs
+            layer: storage
+            reason: "Nessie does not resolve HDFS paths"
+
+  - name: ingestion
+    display: "Ingestion Layer"
+    description: "Brings data into the platform via batch, streaming, or CDC"
+    stacks:
+      - name: kafka_debezium
+        display: "Kafka + Debezium"
+        description: "Event streaming with CDC from relational databases, production-grade combo"
+        compatible:
+          - name: spark
+            layer: processing
+            reason: "Spark Structured Streaming reads Kafka natively"
+          - name: flink
+            layer: processing
+            reason: "Flink has first-class Kafka source/sink connectors"
+          - name: minio
+            layer: storage
+            reason: "no compatibility concern at ingestion level"
+          - name: hdfs
+            layer: storage
+            reason: "no compatibility concern at ingestion level"
+
+      - name: kafka_only
+        display: "Kafka"
+        description: "Event streaming without CDC, suitable when source is not a relational DB"
+        compatible:
+          - name: spark
+            layer: processing
+            reason: "Spark Structured Streaming reads Kafka natively"
+          - name: flink
+            layer: processing
+            reason: "Flink has first-class Kafka source/sink connectors"
+
+      - name: nifi
+        display: "Apache NiFi"
+        description: "Visual dataflow tool, good for heterogeneous sources and routing logic"
+        compatible:
+          - name: spark
+            layer: processing
+            reason: "NiFi can write to HDFS or S3 paths that Spark reads"
+          - name: minio
+            layer: storage
+            reason: "NiFi has S3-compatible processors"
+          - name: hdfs
+            layer: storage
+            reason: "NiFi has native HDFS processors"
+        incompatible:
+          - name: flink
+            layer: processing
+            reason: "NiFi has no native Flink integration, data handoff requires intermediate storage"
+
+  - name: processing
+    display: "Processing Engine"
+    description: "Transforms, enriches, and moves data within the platform"
+    stacks:
+      - name: spark
+        display: "Apache Spark"
+        description: "Industry standard for large-scale batch and streaming data processing"
+        compatible:
+          - name: iceberg
+            layer: table_format
+            reason: "Spark is the primary write engine for Iceberg"
+          - name: delta
+            layer: table_format
+            reason: "Delta was built for Spark"
+          - name: hudi
+            layer: table_format
+            reason: "Hudi is Spark-native"
+          - name: hive_metastore
+            layer: metastore
+            reason: "standard integration via enableHiveSupport"
+          - name: nessie
+            layer: metastore
+            reason: "Spark connects via iceberg-nessie catalog extension"
+          - name: minio
+            layer: storage
+            reason: "via S3A connector"
+          - name: hdfs
+            layer: storage
+            reason: "native HDFS support"
+
+      - name: flink
+        display: "Apache Flink"
+        description: "True stream-first processing, lower latency than Spark Structured Streaming"
+        compatible:
+          - name: iceberg
+            layer: table_format
+            reason: "Flink has stable Iceberg sink support"
+          - name: hive_metastore
+            layer: metastore
+            reason: "Flink can register tables in HMS"
+          - name: minio
+            layer: storage
+            reason: "via S3A connector"
+          - name: kafka_debezium
+            layer: ingestion
+            reason: "Flink has first-class Kafka connectors"
+          - name: kafka_only
+            layer: ingestion
+            reason: "Flink has first-class Kafka connectors"
+        incompatible:
+          - name: delta
+            layer: table_format
+            reason: "Flink and Delta Lake OSS integration is experimental, not production-ready"
+          - name: hudi
+            layer: table_format
+            reason: "Flink-Hudi integration is unstable in OSS, frequent version conflicts"
+
+      - name: spark_and_flink
+        display: "Spark + Flink"
+        description: "Spark for batch, Flink for streaming — use only if both are needed"
+        compatible:
+          - name: iceberg
+            layer: table_format
+            reason: "only Iceberg has stable support from both engines"
+          - name: hive_metastore
+            layer: metastore
+            reason: "HMS works as shared catalog for both engines"
+          - name: minio
+            layer: storage
+            reason: "both engines connect via S3A"
+        incompatible:
+          - name: delta
+            layer: table_format
+            reason: "Flink component of this pair does not support Delta"
+          - name: hudi
+            layer: table_format
+            reason: "Flink component of this pair has unstable Hudi support"
+          - name: hdfs
+            layer: storage
+            reason: "HDFS with both engines in Docker creates namenode contention, not recommended"
+
+  - name: query_engine
+    display: "Query Engine"
+    description: "Enables SQL access to data in the lakehouse for analysts and applications"
+    stacks:
+      - name: trino
+        display: "Trino"
+        description: "Distributed SQL query engine, best OSS option for federated queries across sources"
+        compatible:
+          - name: iceberg
+            layer: table_format
+            reason: "native Iceberg connector, production-grade"
+          - name: delta
+            layer: table_format
+            reason: "Delta connector available, read-only in OSS Trino"
+          - name: hudi
+            layer: table_format
+            reason: "Hudi read support via Hive connector"
+          - name: hive_metastore
+            layer: metastore
+            reason: "Trino was built around HMS as primary catalog"
+          - name: nessie
+            layer: metastore
+            reason: "supported via Iceberg REST catalog config"
+
+      - name: spark_sql
+        display: "Spark SQL only"
+        description: "Use Spark as both processing and query engine, no separate query service"
+        compatible:
+          - name: iceberg
+            layer: table_format
+            reason: "full read/write support"
+          - name: delta
+            layer: table_format
+            reason: "native support"
+          - name: hudi
+            layer: table_format
+            reason: "native support"
+          - name: hive_metastore
+            layer: metastore
+            reason: "standard integration"
+          - name: nessie
+            layer: metastore
+            reason: "via iceberg-nessie extension"
+
+  - name: orchestration
+    display: "Orchestration"
+    description: "Schedules and manages pipeline DAGs, dependencies, and retries"
+    stacks:
+      - name: airflow
+        display: "Apache Airflow"
+        description: "Most widely adopted pipeline orchestrator, large operator ecosystem"
+        compatible:
+          - name: spark
+            layer: processing
+            reason: "SparkSubmitOperator and SparkKubernetesOperator available"
+          - name: flink
+            layer: processing
+            reason: "FlinkOperator available, less mature than Spark"
+          - name: great_expectations
+            layer: quality
+            reason: "Great Expectations has a native Airflow operator"
+          - name: soda
+            layer: quality
+            reason: "Soda can be called via PythonOperator or BashOperator"
+
+      - name: dagster
+        display: "Dagster"
+        description: "Asset-centric orchestration, better lineage and observability than Airflow"
+        compatible:
+          - name: spark
+            layer: processing
+            reason: "Dagster has a Spark integration library"
+          - name: great_expectations
+            layer: quality
+            reason: "native Great Expectations integration"
+          - name: soda
+            layer: quality
+            reason: "can be invoked via op"
+
+      - name: prefect
+        display: "Prefect"
+        description: "Python-native orchestration, simpler setup than Airflow, good for smaller teams"
+        compatible:
+          - name: spark
+            layer: processing
+            reason: "Spark tasks can be called via Prefect tasks"
+          - name: great_expectations
+            layer: quality
+            reason: "GE integration available via prefect-great-expectations"
+
+  - name: quality
+    display: "Data Quality"
+    description: "Validates data against expectations and rules, runs as part of pipelines"
+    stacks:
+      - name: great_expectations
+        display: "Great Expectations"
+        description: "Most mature OSS data quality tool, deep Spark and SQL integration"
+        compatible:
+          - name: airflow
+            layer: orchestration
+            reason: "native GreatExpectationsOperator"
+          - name: dagster
+            layer: orchestration
+            reason: "native integration library"
+          - name: spark
+            layer: processing
+            reason: "GE has a Spark execution engine"
+          - name: trino
+            layer: query_engine
+            reason: "GE can validate via SQLAlchemy against Trino"
+
+      - name: soda
+        display: "Soda Core"
+        description: "Lightweight quality checks defined in YAML, easier to get started than GE"
+        compatible:
+          - name: airflow
+            layer: orchestration
+            reason: "runs via BashOperator or PythonOperator"
+          - name: trino
+            layer: query_engine
+            reason: "Soda supports Trino via trino connector"
+          - name: spark
+            layer: processing
+            reason: "Soda supports Spark via soda-spark package"
+
+  - name: catalog
+    display: "Data Catalog"
+    description: "Dataset discoverability, lineage visualization, and metadata management"
+    stacks:
+      - name: datahub
+        display: "DataHub"
+        description: "LinkedIn-originated, strong lineage via OpenLineage, active community"
+        compatible:
+          - name: airflow
+            layer: orchestration
+            reason: "DataHub Airflow plugin emits lineage automatically"
+          - name: spark
+            layer: processing
+            reason: "OpenLineage Spark listener emits lineage to DataHub"
+          - name: trino
+            layer: query_engine
+            reason: "DataHub has a Trino metadata ingestion source"
+          - name: great_expectations
+            layer: quality
+            reason: "GE can emit results to DataHub"
+
+      - name: openmetadata
+        display: "OpenMetadata"
+        description: "All-in-one catalog with built-in lineage, quality, and governance views"
+        compatible:
+          - name: airflow
+            layer: orchestration
+            reason: "OpenMetadata has an Airflow metadata ingestion connector"
+          - name: trino
+            layer: query_engine
+            reason: "OpenMetadata has a Trino connector"
+          - name: spark
+            layer: processing
+            reason: "OpenMetadata supports OpenLineage events from Spark"
+
+  - name: governance
+    display: "Governance and Security"
+    description: "RBAC, data masking, audit logs, and access control across the platform"
+    stacks:
+      - name: ranger
+        display: "Apache Ranger"
+        description: "Comprehensive RBAC and audit for Hadoop ecosystem services"
+        warning: "Requires 6GB+ additional RAM. Ranger runs Solr and its own PostgreSQL instance. Not recommended for machines with less than 16GB total RAM."
+        compatible:
+          - name: hive_metastore
+            layer: metastore
+            reason: "Ranger was built to govern HMS-registered tables"
+          - name: trino
+            layer: query_engine
+            reason: "Ranger has a Trino plugin for row and column-level security"
+          - name: hdfs
+            layer: storage
+            reason: "Ranger has native HDFS policy enforcement"
+        incompatible:
+          - name: nessie
+            layer: metastore
+            reason: "Ranger has no plugin for Nessie catalog"
+
+      - name: trino_rules
+        display: "Trino built-in access control"
+        description: "File-based or system-level RBAC within Trino, lightweight, no extra services"
+        compatible:
+          - name: trino
+            layer: query_engine
+            reason: "native to Trino, configured via rules JSON file"
+        incompatible:
+          - name: spark_sql
+            layer: query_engine
+            reason: "Trino access control does not apply to Spark SQL queries, governance gap exists"
+
+  - name: visualization
+    display: "Visualization and BI"
+    description: "Dashboards and ad-hoc SQL access for analysts and business users"
+    stacks:
+      - name: superset
+        display: "Apache Superset"
+        description: "Feature-rich BI tool, strong Trino and SQL support, active community"
+        compatible:
+          - name: trino
+            layer: query_engine
+            reason: "Superset has native Trino SQLAlchemy connector"
+          - name: spark_sql
+            layer: query_engine
+            reason: "Superset can connect via Spark Thrift Server"
+
+      - name: metabase
+        display: "Metabase"
+        description: "Simpler UI than Superset, easier for non-technical users, good for quick setup"
+        compatible:
+          - name: trino
+            layer: query_engine
+            reason: "Metabase supports Trino via community driver"
+          - name: spark_sql
+            layer: query_engine
+            reason: "Metabase can connect via Spark Thrift Server"
+
+      - name: redash
+        display: "Redash"
+        description: "Query-first BI, good for data teams who prefer writing SQL over drag-and-drop"
+        compatible:
+          - name: trino
+            layer: query_engine
+            reason: "Redash has a Trino data source"
+          - name: spark_sql
+            layer: query_engine
+            reason: "Redash supports Spark via JDBC"
+
+  - name: observability
+    display: "Platform Observability"
+    description: "Metrics, alerting, and health monitoring for all platform services"
+    stacks:
+      - name: prometheus_grafana
+        display: "Prometheus + Grafana"
+        description: "Standard OSS monitoring stack, most platform services expose Prometheus metrics"
+        compatible:
+          - name: trino
+            layer: query_engine
+            reason: "Trino exposes JMX metrics scrapeable by Prometheus"
+          - name: spark
+            layer: processing
+            reason: "Spark metrics can be exported to Prometheus via spark-prometheus sink"
+          - name: airflow
+            layer: orchestration
+            reason: "Airflow has a StatsD exporter compatible with Prometheus"
+          - name: kafka_debezium
+            layer: ingestion
+            reason: "Kafka JMX metrics are scrapeable by Prometheus"
+          - name: minio
+            layer: storage
+            reason: "MinIO exposes native Prometheus metrics endpoint"
