@@ -16,7 +16,7 @@ Exposes:
 
 from __future__ import annotations
 
-NESSIE_IMAGE = "ghcr.io/projectnessie/nessie:0.99.0"
+NESSIE_IMAGE = "darshandhanke07/odp-nessie:0.99.0"
 
 
 def service_blocks(selections: dict) -> dict:

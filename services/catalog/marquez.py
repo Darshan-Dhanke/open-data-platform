@@ -27,8 +27,8 @@ from __future__ import annotations
 from pathlib import Path
 
 # Upstream official images (pulled directly, like the observability stack).
-MARQUEZ_IMAGE = "marquezproject/marquez:0.50.0"
-MARQUEZ_WEB_IMAGE = "marquezproject/marquez-web:0.50.0"
+MARQUEZ_IMAGE = "darshandhanke07/odp-marquez:0.50.0"
+MARQUEZ_WEB_IMAGE = "darshandhanke07/odp-marquez-web:0.50.0"
 # Reuse the platform's Postgres image for the throwaway DB-init step so nothing
 # extra is pulled.
 POSTGRES_IMAGE = "darshandhanke07/odp-postgres:15-alpine"

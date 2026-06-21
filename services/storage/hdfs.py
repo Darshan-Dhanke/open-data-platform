@@ -12,8 +12,8 @@ Exposes:
 
 from __future__ import annotations
 
-NAMENODE_IMAGE = "bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8"
-DATANODE_IMAGE = "bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8"
+NAMENODE_IMAGE = "darshandhanke07/odp-hadoop-namenode:2.0.0-hadoop3.2.1-java8"
+DATANODE_IMAGE = "darshandhanke07/odp-hadoop-datanode:2.0.0-hadoop3.2.1-java8"
 
 _CORE_CONF = {
     "CORE_CONF_fs_defaultFS": "hdfs://namenode:8020",

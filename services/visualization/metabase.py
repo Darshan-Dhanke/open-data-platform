@@ -12,7 +12,7 @@ Exposes:
 
 from __future__ import annotations
 
-METABASE_IMAGE = "metabase/metabase:v0.50.26"
+METABASE_IMAGE = "darshandhanke07/odp-metabase:v0.50.26"
 # Starburst's community Metabase driver — adds Trino as a queryable database.
 TRINO_DRIVER_URL = (
     "https://github.com/starburstdata/metabase-driver/releases/download/"
@@ -38,7 +38,7 @@ def service_blocks(selections: dict) -> dict:
         },
         # Download the Trino driver into the shared plugins volume.
         "metabase-plugin-init": {
-            "image": "curlimages/curl:8.10.1",
+            "image": "darshandhanke07/odp-curl:8.10.1",
             "container_name": "metabase-plugin-init",
             "entrypoint": ["/bin/sh", "-c"],
             "command": [

@@ -11,7 +11,7 @@ Exposes:
 
 from __future__ import annotations
 
-PREFECT_IMAGE = "prefecthq/prefect:2-latest"
+PREFECT_IMAGE = "darshandhanke07/odp-prefect:2-latest"
 
 
 def service_blocks(selections: dict) -> dict:

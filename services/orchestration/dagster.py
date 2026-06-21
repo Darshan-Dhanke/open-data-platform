@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-PYTHON_IMAGE = "python:3.11-slim"
+PYTHON_IMAGE = "darshandhanke07/odp-python:3.11-slim"
 DAGSTER_PIP = "dagster==1.8.13 dagster-webserver==1.8.13 dagster-postgres==0.24.13"
 
 

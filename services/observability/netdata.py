@@ -13,7 +13,7 @@ Exposes:
 
 from __future__ import annotations
 
-NETDATA_IMAGE = "netdata/netdata:v1.47.0"
+NETDATA_IMAGE = "darshandhanke07/odp-netdata:v1.47.0"
 
 
 def service_blocks(selections: dict) -> dict:

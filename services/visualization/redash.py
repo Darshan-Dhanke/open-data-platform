@@ -12,8 +12,9 @@ Exposes:
 
 from __future__ import annotations
 
-REDASH_IMAGE = "redash/redash:10.1.0.b50633"
-REDIS_IMAGE = "redis:7-alpine"
+REDASH_IMAGE = "darshandhanke07/odp-redash:10.1.0.b50633"
+# Reuse the platform's existing odp-redis image (already on Docker Hub).
+REDIS_IMAGE = "darshandhanke07/odp-redis:7-alpine"
 
 # Shared environment for all Redash processes.
 _REDASH_ENV = {

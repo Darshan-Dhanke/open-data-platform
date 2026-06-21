@@ -11,7 +11,7 @@ Exposes:
 
 from __future__ import annotations
 
-NIFI_IMAGE = "apache/nifi:1.27.0"
+NIFI_IMAGE = "darshandhanke07/odp-nifi:1.27.0"
 
 
 def service_blocks(selections: dict) -> dict:

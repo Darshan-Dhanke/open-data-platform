@@ -25,9 +25,9 @@ from pathlib import Path
 
 # Upstream official images. These are not yet mirrored into the odp-* Docker
 # Hub namespace; they pull directly from their public registries.
-PROMETHEUS_IMAGE = "prom/prometheus:v2.54.1"
-GRAFANA_IMAGE = "grafana/grafana:11.2.0"
-CADVISOR_IMAGE = "gcr.io/cadvisor/cadvisor:v0.49.1"
+PROMETHEUS_IMAGE = "darshandhanke07/odp-prometheus:v2.54.1"
+GRAFANA_IMAGE = "darshandhanke07/odp-grafana:11.2.0"
+CADVISOR_IMAGE = "darshandhanke07/odp-cadvisor:v0.49.1"
 
 
 def service_blocks(selections: dict) -> dict:

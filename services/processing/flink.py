@@ -11,7 +11,7 @@ Exposes:
 
 from __future__ import annotations
 
-FLINK_IMAGE = "flink:1.18.1-scala_2.12-java11"
+FLINK_IMAGE = "darshandhanke07/odp-flink:1.18.1-scala_2.12-java11"
 
 # Shared cluster settings. jobmanager.rpc.address must resolve to the JobManager
 # service so the TaskManager can register with it.
